@@ -7,6 +7,8 @@
 #include "ofRectangle.h"
 #include "ofPixels.h"
 
+using HighResClock = std::chrono::time_point<std::chrono::high_resolution_clock>;
+
 class ofxFFmpegRecorder
 {
 public:
@@ -19,7 +21,7 @@ public:
      * @param recordAudio This is not yet supported with custom recording
      * @param ffmpegPath This variable is optional. If left empty, the default "ffmpeg" is used. This required that the "ffmpeg" is in the system's path.
      */
-    void setup(bool recordVideo, bool recordAudio, ofVec2f videoSize = ofVec2f::zero(), float fps = 30.f, unsigned int bitrate = 2000,
+    void setup(bool recordVideo, bool recordAudio, ofVec2f videoSize = ofVec2f::zero(), float fps = 30, unsigned int bitrate = 2000,
                const std::string &ffmpegPath = "");
 
     bool isRecordVideo() const;
@@ -48,6 +50,9 @@ public:
 
     unsigned int getBitRate() const;
     void setBitRate(unsigned int rate);
+
+    std::string getVideCodec() const;
+    void setVideCodec(const std::string &codec);
 
     /**
      * @brief Starts recording a video from a default device that is determined by @ref determineDefaultDevices()
@@ -157,7 +162,7 @@ private:
 
     ofVec2f m_VideoSize;
     float m_Fps;
-    unsigned int m_BitRate;
+    unsigned int m_BitRate, m_AddedVideFrames;
 
     ofxProcess m_Process;
     float m_CaptureDuration;
@@ -171,6 +176,10 @@ private:
      * @brief If the default audio device is not set, the default one is automatically set by this class
      */
     ofSoundDevice m_DefaultAudioDevice;
+
+    std::string m_VideCodec;
+
+    HighResClock m_LastFrameAddedTime;
 
     /**
      * @brief Additional arguments can be used to extend the functionality of ofxFFmpegRecorder. Additional arguments are used

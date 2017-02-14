@@ -8,7 +8,6 @@
 #define LOG_ERROR(message) ofLogError("") << __FUNCTION__ << ":" << __LINE__ << ": " << message
 #define LOG_WARNING(message) ofLogWarning("") << __FUNCTION__ << ":" << __LINE__ << ": " << message
 #define LOG_NOTICE(message) ofLogNotice("") << __FUNCTION__ << ":" << __LINE__ << ": " << message
-#define LOG_VERBOSE(message) ofLogVerbose("") << __FUNCTION__ << ":" << __LINE__ << ": " << message
 
 ofxFFmpegRecorder::ofxFFmpegRecorder()
     : m_FFmpegPath("ffmpeg")
@@ -17,11 +16,14 @@ ofxFFmpegRecorder::ofxFFmpegRecorder()
     , m_IsRecordAudio(false)
     , m_IsOverWrite(false)
     , m_VideoSize(0, 0)
-    , m_Fps(30)
+    , m_Fps(30.f)
+    , m_BitRate(2000)
+    , m_AddedVideFrames(0)
     , m_Process()
     , m_CaptureDuration(0)
     , m_DefaultVideoDevice()
     , m_DefaultAudioDevice()
+    , m_VideCodec("mpeg4")
     , m_File(nullptr)
 {
 
@@ -172,6 +174,20 @@ void ofxFFmpegRecorder::setBitRate(unsigned int rate)
     m_BitRate = rate;
 }
 
+std::string ofxFFmpegRecorder::getVideCodec() const
+{
+    return m_VideCodec;
+}
+
+void ofxFFmpegRecorder::setVideCodec(const std::string &codec)
+{
+    if (isRecording()) {
+        LOG_NOTICE("A recording is in proggress. The change will take effect for the next recording session.");
+    }
+
+    m_VideCodec = codec;
+}
+
 bool ofxFFmpegRecorder::record(float duration)
 {
     if (isRecording()) {
@@ -247,7 +263,7 @@ bool ofxFFmpegRecorder::startCustomRecord()
         return false;
     }
 
-    determineDefaultDevices();
+    m_AddedVideFrames = 0;
 
     std::vector<std::string> args;
     std::copy(m_AdditionalInputArguments.begin(), m_AdditionalInputArguments.end(), std::back_inserter(args));
@@ -261,7 +277,7 @@ bool ofxFFmpegRecorder::startCustomRecord()
     args.push_back("-vcodec rawvideo");
     args.push_back("-i -");
 
-    args.push_back("-vcodec mpeg4");
+    args.push_back("-vcodec " + m_VideCodec);
     args.push_back("-b:v " + std::to_string(m_BitRate) + "k");
     args.push_back("-r " + std::to_string(m_Fps));
     std::copy(m_AdditionalOutputArguments.begin(), m_AdditionalOutputArguments.end(), std::back_inserter(args));
@@ -273,7 +289,6 @@ bool ofxFFmpegRecorder::startCustomRecord()
         cmd += s + " ";
     }
 
-    LOG_NOTICE(cmd);
 #if defined(_WIN32)
     m_File = _popen(cmd.c_str(), "wb");
 #else
@@ -285,13 +300,29 @@ bool ofxFFmpegRecorder::startCustomRecord()
 
 size_t ofxFFmpegRecorder::addFrame(const ofPixels &pixels)
 {
+    if (m_File == nullptr) {
+        LOG_ERROR("Custom recording is not in proggress. Cannot add the frame.");
+        return 0;
+    }
+
     size_t written = 0;
 
-    if (m_File) {
+    if (m_AddedVideFrames == 0) {
+        m_LastFrameAddedTime = std::chrono::high_resolution_clock::now();
+    }
+
+    HighResClock now = std::chrono::high_resolution_clock::now();
+    const float delta = std::chrono::duration<double>(now - m_LastFrameAddedTime).count();
+    const float framerate = 1.f / m_Fps;
+
+    if (m_AddedVideFrames == 0 || delta >= framerate) {
         const unsigned char *data = pixels.getData();
         const size_t dataLength = m_VideoSize.x * m_VideoSize.y * 3;
         written = fwrite(data, sizeof(char), dataLength, m_File);
+        m_LastFrameAddedTime = std::chrono::high_resolution_clock::now();
     }
+
+    m_AddedVideFrames++;
 
     return written;
 }
