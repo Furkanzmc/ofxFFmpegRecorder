@@ -4,24 +4,43 @@
 #include "ofVideoGrabber.h"
 #include "ofSoundStream.h"
 
+// Logging macros
+#define LOG_ERROR(message) ofLogError("") << __FUNCTION__ << ":" << __LINE__ << ": " << message
+#define LOG_WARNING(message) ofLogWarning("") << __FUNCTION__ << ":" << __LINE__ << ": " << message
+#define LOG_NOTICE(message) ofLogNotice("") << __FUNCTION__ << ":" << __LINE__ << ": " << message
+#define LOG_VERBOSE(message) ofLogVerbose("") << __FUNCTION__ << ":" << __LINE__ << ": " << message
+
 ofxFFmpegRecorder::ofxFFmpegRecorder()
     : m_FFmpegPath("ffmpeg")
     , m_OutputPath("")
     , m_IsRecordVideo(false)
     , m_IsRecordAudio(false)
     , m_IsOverWrite(false)
+    , m_VideoSize(0, 0)
+    , m_Fps(30)
     , m_Process()
     , m_CaptureDuration(0)
     , m_DefaultVideoDevice()
     , m_DefaultAudioDevice()
+    , m_File(nullptr)
 {
 
 }
 
-void ofxFFmpegRecorder::setup(bool recordVideo, bool recordAudio, const std::string &ffmpegPath)
+ofxFFmpegRecorder::~ofxFFmpegRecorder()
+{
+    stop();
+}
+
+void ofxFFmpegRecorder::setup(bool recordVideo, bool recordAudio, ofVec2f videoSize, float fps, unsigned int bitrate, const std::string &ffmpegPath)
 {
     m_IsRecordVideo = recordVideo;
     m_IsRecordAudio = recordAudio;
+    m_VideoSize = videoSize;
+
+    m_Fps = fps;
+    m_BitRate = bitrate;
+
     if (ffmpegPath.length() > 0) {
         m_FFmpegPath = ffmpegPath;
     }
@@ -34,8 +53,8 @@ bool ofxFFmpegRecorder::isRecordVideo() const
 
 void ofxFFmpegRecorder::setRecordVideo(bool record)
 {
-    if (m_Process.isRunning()) {
-        ofLogVerbose("ofxFFmpegRecorder") << "A recording is in proggress. The change will take effect for the next recording session.";
+    if (isRecording()) {
+        LOG_NOTICE("A recording is in proggress. The change will take effect for the next recording session.");
     }
 
     m_IsRecordVideo = record;
@@ -48,8 +67,8 @@ bool ofxFFmpegRecorder::isRecordAudio() const
 
 void ofxFFmpegRecorder::setRecordAudio(bool record)
 {
-    if (m_Process.isRunning()) {
-        ofLogVerbose("ofxFFmpegRecorder") << "A recording is in proggress. The change will take effect for the next recording session.";
+    if (isRecording()) {
+        LOG_NOTICE("A recording is in proggress. The change will take effect for the next recording session.");
     }
 
     m_IsRecordAudio = record;
@@ -62,8 +81,8 @@ std::string ofxFFmpegRecorder::getFFmpegPath() const
 
 void ofxFFmpegRecorder::setFFmpegPath(const std::string &path)
 {
-    if (m_Process.isRunning()) {
-        ofLogVerbose("ofxFFmpegRecorder") << "A recording is in proggress. The change will take effect for the next recording session.";
+    if (isRecording()) {
+        LOG_NOTICE("A recording is in proggress. The change will take effect for the next recording session.");
     }
 
     m_FFmpegPath = path;
@@ -76,8 +95,8 @@ float ofxFFmpegRecorder::getCaptureDuration() const
 
 void ofxFFmpegRecorder::setCaptureDuration(float duration)
 {
-    if (m_Process.isRunning()) {
-        ofLogVerbose("ofxFFmpegRecorder") << "A recording is in proggress. The change will take effect for the next recording session.";
+    if (isRecording()) {
+        LOG_NOTICE("A recording is in proggress. The change will take effect for the next recording session.");
     }
 
     m_CaptureDuration = duration;
@@ -90,8 +109,8 @@ ofVideoDevice ofxFFmpegRecorder::getDefaultVideoDevice() const
 
 void ofxFFmpegRecorder::setDefaultVideoDevice(const ofVideoDevice &device)
 {
-    if (m_Process.isRunning()) {
-        ofLogVerbose("ofxFFmpegRecorder") << "A recording is in proggress. The change will take effect for the next recording session.";
+    if (isRecording()) {
+        LOG_NOTICE("A recording is in proggress. The change will take effect for the next recording session.");
     }
 
     m_DefaultVideoDevice = device;
@@ -104,8 +123,8 @@ ofSoundDevice ofxFFmpegRecorder::getDefaultAudioDevice() const
 
 void ofxFFmpegRecorder::setDefaultAudioDevice(const ofSoundDevice &device)
 {
-    if (m_Process.isRunning()) {
-        ofLogVerbose("ofxFFmpegRecorder") << "A recording is in proggress. The change will take effect for the next recording session.";
+    if (isRecording()) {
+        LOG_NOTICE("A recording is in proggress. The change will take effect for the next recording session.");
     }
 
     m_DefaultAudioDevice = device;
@@ -118,27 +137,55 @@ std::string ofxFFmpegRecorder::getOutputPath() const
 
 void ofxFFmpegRecorder::setOutputPath(const std::string &path)
 {
-    if (m_Process.isRunning()) {
-        ofLogVerbose("ofxFFmpegRecorder") << "A recording is in proggress. The change will take effect for the next recording session.";
+    if (isRecording()) {
+        LOG_NOTICE("A recording is in proggress. The change will take effect for the next recording session.");
     }
 
     m_OutputPath = path;
 }
 
+float ofxFFmpegRecorder::getFps() const
+{
+    return m_Fps;
+}
+
+void ofxFFmpegRecorder::setFps(float fps)
+{
+    if (isRecording()) {
+        LOG_NOTICE("A recording is in proggress. The change will take effect for the next recording session.");
+    }
+
+    m_Fps = fps;
+}
+
+unsigned int ofxFFmpegRecorder::getBitRate() const
+{
+    return m_BitRate;
+}
+
+void ofxFFmpegRecorder::setBitRate(unsigned int rate)
+{
+    if (isRecording()) {
+        LOG_NOTICE("A recording is in proggress. The change will take effect for the next recording session.");
+    }
+
+    m_BitRate = rate;
+}
+
 bool ofxFFmpegRecorder::record(float duration)
 {
-    if (m_Process.isRunning()) {
-        ofLogWarning("ofxFFmpegRecorder") << "A recording is already in proggress.";
+    if (isRecording()) {
+        LOG_ERROR("A recording is already in proggress.");
         return false;
     }
 
     if (m_OutputPath.length() == 0) {
-        ofLogWarning("ofxFFmpegRecorder") << "Output path is empty. Cannot record.";
+        LOG_ERROR("Output path is empty. Cannot record.");
         return false;
     }
 
     if (ofFile::doesFileExist(m_OutputPath, false) && m_IsOverWrite == false) {
-        ofLogError("ofxFFmpegRecorder") << "The output file already exists and overwriting is disabled. Cannot capture video.";
+        LOG_ERROR("The output file already exists and overwriting is disabled. Cannot capture video.");
         return false;
     }
 
@@ -174,7 +221,7 @@ bool ofxFFmpegRecorder::record(float duration)
 
     args.push_back("-i " + inputDevices);
 
-    std::copy(m_AdditionalArguments.begin(), m_AdditionalArguments.end(), std::back_inserter(args));
+    std::copy(m_AdditionalInputArguments.begin(), m_AdditionalInputArguments.end(), std::back_inserter(args));
     args.push_back(m_OutputPath);
 
     m_Process.setup(m_FFmpegPath, "", args);
@@ -183,14 +230,89 @@ bool ofxFFmpegRecorder::record(float duration)
     return true;
 }
 
+bool ofxFFmpegRecorder::startCustomRecord()
+{
+    if (isRecording()) {
+        LOG_ERROR("A recording is already in proggress.");
+        return false;
+    }
+
+    if (m_OutputPath.length() == 0) {
+        LOG_ERROR("Output path is empty. Cannot record.");
+        return false;
+    }
+
+    if (ofFile::doesFileExist(m_OutputPath, false) && m_IsOverWrite == false) {
+        LOG_ERROR("The output file already exists and overwriting is disabled. Cannot capture video.");
+        return false;
+    }
+
+    determineDefaultDevices();
+
+    std::vector<std::string> args;
+    std::copy(m_AdditionalInputArguments.begin(), m_AdditionalInputArguments.end(), std::back_inserter(args));
+
+    args.push_back("-y");
+    args.push_back("-an");
+    args.push_back("-r " + std::to_string(m_Fps));
+    args.push_back("-s " + std::to_string(static_cast<unsigned int>(m_VideoSize.x)) + "x" + std::to_string(static_cast<unsigned int>(m_VideoSize.y)));
+    args.push_back("-f rawvideo");
+    args.push_back("-pix_fmt rgb24");
+    args.push_back("-vcodec rawvideo");
+    args.push_back("-i -");
+
+    args.push_back("-vcodec mpeg4");
+    args.push_back("-b:v " + std::to_string(m_BitRate) + "k");
+    args.push_back("-r " + std::to_string(m_Fps));
+    std::copy(m_AdditionalOutputArguments.begin(), m_AdditionalOutputArguments.end(), std::back_inserter(args));
+
+    args.push_back(m_OutputPath);
+
+    std::string cmd = "ffmpeg ";
+    for (auto s : args) {
+        cmd += s + " ";
+    }
+
+    LOG_NOTICE(cmd);
+#if defined(_WIN32)
+    m_File = _popen(cmd.c_str(), "wb");
+#else
+    m_File = _popen(cmd.c_str(), "w");
+#endif // _WIN32
+
+    return true;
+}
+
+size_t ofxFFmpegRecorder::addFrame(const ofPixels &pixels)
+{
+    size_t written = 0;
+
+    if (m_File) {
+        const unsigned char *data = pixels.getData();
+        const size_t dataLength = m_VideoSize.x * m_VideoSize.y * 3;
+        written = fwrite(data, sizeof(char), dataLength, m_File);
+    }
+
+    return written;
+}
+
 void ofxFFmpegRecorder::stop()
 {
     m_Process.write("q");
+    if (m_File) {
+        _pclose(m_File);
+        m_File = nullptr;
+    }
 }
 
 void ofxFFmpegRecorder::cancel()
 {
     m_Process.write("q");
+    if (m_File) {
+        _pclose(m_File);
+        m_File = nullptr;
+    }
+
     ofFile::removeFile(m_OutputPath, false);
 }
 
@@ -204,40 +326,79 @@ void ofxFFmpegRecorder::setOverWrite(bool overwrite)
     m_IsOverWrite = overwrite;
 }
 
-std::vector<std::string> ofxFFmpegRecorder::getAdditionalArguments() const
+const std::vector<string> &ofxFFmpegRecorder::getAdditionalInputArguments() const
 {
-    return m_AdditionalArguments;
+    return m_AdditionalInputArguments;
 }
 
-void ofxFFmpegRecorder::setAdditionalArguments(const std::vector<std::string> &args)
+void ofxFFmpegRecorder::setAdditionalInputArguments(const std::vector<std::string> &args)
 {
-    if (m_Process.isRunning()) {
-        ofLogVerbose("ofxFFmpegRecorder") << "A recording is in proggress. The change will take effect for the next recording session.";
+    if (isRecording()) {
+        LOG_NOTICE("A recording is in proggress. The change will take effect for the next recording session.");
     }
 
-    m_AdditionalArguments = args;
+    m_AdditionalInputArguments = args;
 }
 
-void ofxFFmpegRecorder::addAdditionalArgument(const string &arg)
+void ofxFFmpegRecorder::addAdditionalInputArgument(const string &arg)
 {
-    if (m_Process.isRunning()) {
-        ofLogVerbose("ofxFFmpegRecorder") << "A recording is in proggress. The change will take effect for the next recording session.";
+    if (isRecording()) {
+        LOG_NOTICE("A recording is in proggress. The change will take effect for the next recording session.");
     }
 
-    m_AdditionalArguments.push_back(arg);
+    m_AdditionalInputArguments.push_back(arg);
+}
+
+void ofxFFmpegRecorder::clearAdditionalInputArguments()
+{
+    m_AdditionalInputArguments.clear();
+}
+
+const std::vector<string> &ofxFFmpegRecorder::getAdditionalOutputArguments() const
+{
+    return m_AdditionalOutputArguments;
+}
+
+void ofxFFmpegRecorder::setAdditionalOutputArguments(const std::vector<std::string> &args)
+{
+    if (isRecording()) {
+        LOG_NOTICE("A recording is in proggress. The change will take effect for the next recording session.");
+    }
+
+    m_AdditionalOutputArguments = args;
+}
+
+void ofxFFmpegRecorder::addAdditionalOutputArgument(const string &arg)
+{
+    if (isRecording()) {
+        LOG_NOTICE("A recording is in proggress. The change will take effect for the next recording session.");
+    }
+
+    m_AdditionalOutputArguments.push_back(arg);
+}
+
+void ofxFFmpegRecorder::clearAdditionalOutputArguments()
+{
+    m_AdditionalOutputArguments.clear();
+}
+
+void ofxFFmpegRecorder::clearAdditionalArguments()
+{
+    m_AdditionalInputArguments.clear();
+    m_AdditionalOutputArguments.clear();
 }
 
 bool ofxFFmpegRecorder::isRecording() const
 {
-    return m_Process.isRunning();
+    return m_Process.isRunning() || m_File != nullptr;
 }
 
 void ofxFFmpegRecorder::saveThumbnail(const unsigned int &hour, const unsigned int &minute, const float &second, const string &output, ofVec2f size,
                                       ofRectangle crop, string videoFilePath)
 {
     if (videoFilePath.length() == 0) {
-        if (m_Process.isRunning()) {
-            ofLogError("ofxFFmpegRecorder") << "Cannot use the default video file because a recording is already in proggress.";
+        if (isRecording()) {
+            LOG_ERROR("Cannot use the default video file because a recording is already in proggress.");
             return;
         }
 
