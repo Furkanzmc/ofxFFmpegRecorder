@@ -1,6 +1,4 @@
 #pragma once
-// Addons
-#include "ofxProcess.h"
 // openFrameworks
 #include "ofTypes.h"
 #include "ofBaseSoundStream.h"
@@ -197,10 +195,13 @@ public:
     void clearAdditionalArguments();
 
     /**
-     * @brief Returns true If m_Process is running or m_File is not nullptr.
+     * @brief Returns true if any kind of recording is in proggress.
      * @return
      */
     bool isRecording() const;
+
+    bool isRecordingCustom() const;
+    bool isRecordingDefault() const;
 
     /**
      * @brief Saves a thumbnail from the video at the given time. If videoFilePath is empty, then the m_OutputPath is used as the video source.
@@ -230,8 +231,7 @@ private:
     bool m_IsPaused;
 
     ofVec2f m_VideoSize;
-    unsigned int m_BitRate, m_AddedVideFrames;
-    ofxProcess m_Process;
+    unsigned int m_BitRate, m_AddedVideoFrames;
 
     float m_Fps,
           m_CaptureDuration,
@@ -248,7 +248,7 @@ private:
     ofSoundDevice m_DefaultAudioDevice;
 
     std::string m_VideCodec;
-    FILE *m_File;
+    FILE *m_CustomRecordingFile, *m_DefaultRecordingFile;
 
     /**
      * @brief This is used to make sure that we put in frames no more than the m_Fps. This is used in custom recording.

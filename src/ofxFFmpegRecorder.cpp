@@ -18,15 +18,15 @@ ofxFFmpegRecorder::ofxFFmpegRecorder()
     , m_IsPaused(false)
     , m_VideoSize(0, 0)
     , m_BitRate(2000)
-    , m_AddedVideFrames(0)
-    , m_Process()
+    , m_AddedVideoFrames(0)
     , m_Fps(30.f)
     , m_CaptureDuration(0.f)
     , m_TotalPauseDuration(0.f)
     , m_DefaultVideoDevice()
     , m_DefaultAudioDevice()
     , m_VideCodec("mpeg4")
-    , m_File(nullptr)
+    , m_CustomRecordingFile(nullptr)
+    , m_DefaultRecordingFile(nullptr)
 {
 
 }
@@ -197,7 +197,7 @@ bool ofxFFmpegRecorder::isPaused() const
 
 void ofxFFmpegRecorder::setPaused(bool paused)
 {
-    if (m_File == nullptr) {
+    if (m_CustomRecordingFile == nullptr) {
         LOG_WARNING("Cannot pause the default webcam recording.");
     }
     else {
@@ -216,7 +216,7 @@ void ofxFFmpegRecorder::setPaused(bool paused)
 
 float ofxFFmpegRecorder::getRecordedDuration() const
 {
-    return m_AddedVideFrames / m_Fps;
+    return m_AddedVideoFrames / m_Fps;
 }
 
 bool ofxFFmpegRecorder::record(float duration)
@@ -266,13 +266,21 @@ bool ofxFFmpegRecorder::record(float duration)
         inputDevices += "audio=\"" + m_DefaultAudioDevice.name + "\"";
     }
 
+    args.push_back("-y");
+    std::copy(m_AdditionalInputArguments.begin(), m_AdditionalInputArguments.end(), std::back_inserter(args));
     args.push_back("-i " + inputDevices);
 
-    std::copy(m_AdditionalInputArguments.begin(), m_AdditionalInputArguments.end(), std::back_inserter(args));
+    args.push_back("-b:v " + std::to_string(m_BitRate) + "k");
     args.push_back(m_OutputPath);
 
-    m_Process.setup(m_FFmpegPath, "", args);
-    m_Process.launchDetached();
+    std::copy(m_AdditionalOutputArguments.begin(), m_AdditionalOutputArguments.end(), std::back_inserter(args));
+
+    std::string cmd = m_FFmpegPath + " ";
+    for (auto arg : args) {
+        cmd += arg + " ";
+    }
+
+    m_DefaultRecordingFile = _popen(cmd.c_str(), "w");
 
     return true;
 }
@@ -294,7 +302,7 @@ bool ofxFFmpegRecorder::startCustomRecord()
         return false;
     }
 
-    m_AddedVideFrames = 0;
+    m_AddedVideoFrames = 0;
 
     std::vector<std::string> args;
     std::copy(m_AdditionalInputArguments.begin(), m_AdditionalInputArguments.end(), std::back_inserter(args));
@@ -317,15 +325,15 @@ bool ofxFFmpegRecorder::startCustomRecord()
 
     args.push_back(m_OutputPath);
 
-    std::string cmd = "ffmpeg ";
-    for (auto s : args) {
-        cmd += s + " ";
+    std::string cmd = m_FFmpegPath + " ";
+    for (auto arg : args) {
+        cmd += arg + " ";
     }
 
 #if defined(_WIN32)
-    m_File = _popen(cmd.c_str(), "wb");
+    m_CustomRecordingFile = _popen(cmd.c_str(), "wb");
 #else
-    m_File = _popen(cmd.c_str(), "w");
+    m_CustomRecordingFile = _popen(cmd.c_str(), "w");
 #endif // _WIN32
 
     return true;
@@ -338,14 +346,19 @@ size_t ofxFFmpegRecorder::addFrame(const ofPixels &pixels)
         return 0;
     }
 
-    if (m_File == nullptr) {
+    if (m_CustomRecordingFile == nullptr) {
         LOG_ERROR("Custom recording is not in proggress. Cannot add the frame.");
+        return 0;
+    }
+
+    if (pixels.isAllocated() == false) {
+        LOG_ERROR("Given pixels is not allocated.");
         return 0;
     }
 
     size_t written = 0;
 
-    if (m_AddedVideFrames == 0) {
+    if (m_AddedVideoFrames == 0) {
         m_Thread = std::thread(&ofxFFmpegRecorder::processFrame, this);
         m_RecordStartTime = std::chrono::high_resolution_clock::now();
     }
@@ -355,10 +368,10 @@ size_t ofxFFmpegRecorder::addFrame(const ofPixels &pixels)
     float delta = std::chrono::duration<float>(now - m_RecordStartTime).count() - recordedDuration - m_TotalPauseDuration;
     const float framerate = 1.f / m_Fps;
 
-    while (m_AddedVideFrames == 0 || delta >= framerate) {
+    while (m_AddedVideoFrames == 0 || delta >= framerate) {
         delta -= framerate;
         m_Frames.produce(new ofPixels(pixels));
-        m_AddedVideFrames++;
+        m_AddedVideoFrames++;
     }
 
     return written;
@@ -366,21 +379,31 @@ size_t ofxFFmpegRecorder::addFrame(const ofPixels &pixels)
 
 void ofxFFmpegRecorder::stop()
 {
-    m_Process.write("q");
-    if (m_File) {
-        _pclose(m_File);
-        m_File = nullptr;
+    if (m_CustomRecordingFile) {
+        _pclose(m_CustomRecordingFile);
+        m_CustomRecordingFile = nullptr;
+        m_AddedVideoFrames = 0;
         joinThread();
+    }
+    else {
+        fwrite("q", sizeof(char), 1, m_DefaultRecordingFile);
+        _pclose(m_DefaultRecordingFile);
+        m_DefaultRecordingFile = nullptr;
     }
 }
 
 void ofxFFmpegRecorder::cancel()
 {
-    m_Process.write("q");
-    if (m_File) {
-        _pclose(m_File);
-        m_File = nullptr;
+    if (m_CustomRecordingFile) {
+        _pclose(m_CustomRecordingFile);
+        m_CustomRecordingFile = nullptr;
+        m_AddedVideoFrames = 0;
         joinThread();
+    }
+    else {
+        fwrite("q", sizeof(char), 1, m_DefaultRecordingFile);
+        _pclose(m_DefaultRecordingFile);
+        m_DefaultRecordingFile = nullptr;
     }
 
     ofFile::removeFile(m_OutputPath, false);
@@ -460,8 +483,19 @@ void ofxFFmpegRecorder::clearAdditionalArguments()
 
 bool ofxFFmpegRecorder::isRecording() const
 {
-    return m_Process.isRunning() || m_File != nullptr;
+    return m_DefaultRecordingFile != nullptr || m_CustomRecordingFile != nullptr;
 }
+
+bool ofxFFmpegRecorder::isRecordingCustom() const
+{
+    return m_CustomRecordingFile != nullptr;
+}
+
+bool ofxFFmpegRecorder::isRecordingDefault() const
+{
+    return m_DefaultRecordingFile != nullptr;
+}
+
 
 void ofxFFmpegRecorder::saveThumbnail(const unsigned int &hour, const unsigned int &minute, const float &second, const string &output, ofVec2f size,
                                       ofRectangle crop, string videoFilePath)
@@ -507,9 +541,13 @@ void ofxFFmpegRecorder::saveThumbnail(const unsigned int &hour, const unsigned i
 
     args.push_back(output);
 
-    ofxProcess process;
-    process.setup(m_FFmpegPath, "", args);
-    process.launchDetached();
+    std::string cmd = m_FFmpegPath + " ";
+    for (auto arg : args) {
+        cmd += arg + " ";
+    }
+
+    FILE *file = _popen(cmd.c_str(), "w");
+    _pclose(file);
 }
 
 void ofxFFmpegRecorder::determineDefaultDevices()
@@ -528,7 +566,7 @@ void ofxFFmpegRecorder::determineDefaultDevices()
 
     if (m_IsRecordAudio && m_DefaultAudioDevice.isDefaultInput == false) {
         ofSoundStream soundStream;
-        const std::vector<ofSoundDevice> audoDevices = soundStream.listDevices();
+        const std::vector<ofSoundDevice> audoDevices = soundStream.getDeviceList();
 
         for (const ofSoundDevice &device : audoDevices) {
             if (device.isDefaultInput) {
@@ -546,7 +584,7 @@ void ofxFFmpegRecorder::processFrame()
         if (m_Frames.consume(pixels) && pixels) {
             const unsigned char *data = pixels->getData();
             const size_t dataLength = m_VideoSize.x * m_VideoSize.y * 3;
-            const size_t written = fwrite(data, sizeof(char), dataLength, m_File);
+            const size_t written = fwrite(data, sizeof(char), dataLength, m_CustomRecordingFile);
             if (written <= 0) {
                 LOG_WARNING("Cannot write the frame.");
             }
