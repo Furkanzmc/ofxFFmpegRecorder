@@ -9,6 +9,9 @@
 
 using HighResClock = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
+/**
+ * LockFreeQueue is taken from here: https://github.com/timscaffidi/ofxVideoRecorder/blob/master/src/ofxVideoRecorder.h#L9
+ */
 template <typename T>
 struct LockFreeQueue {
 
@@ -105,6 +108,9 @@ public:
 
     std::string getVideCodec() const;
     void setVideCodec(const std::string &codec);
+
+    bool isPaused() const;
+    void setPaused(bool paused);
 
     /**
      * @brief Returns the record duration for the custom recording. This will return 0 for the webcam recording.
@@ -218,12 +224,18 @@ private:
      */
     bool m_IsOverWrite;
 
-    ofVec2f m_VideoSize;
-    float m_Fps;
-    unsigned int m_BitRate, m_AddedVideFrames;
+    /**
+     * @brief Pausing only works for custom recording.
+     */
+    bool m_IsPaused;
 
+    ofVec2f m_VideoSize;
+    unsigned int m_BitRate, m_AddedVideFrames;
     ofxProcess m_Process;
-    float m_CaptureDuration;
+
+    float m_Fps,
+          m_CaptureDuration,
+          m_TotalPauseDuration;
 
     /**
      * @brief If the default video device is not set, the default one is automatically set by this class
@@ -242,6 +254,8 @@ private:
      * @brief This is used to make sure that we put in frames no more than the m_Fps. This is used in custom recording.
      */
     HighResClock m_RecordStartTime;
+
+    HighResClock m_PauseStartTime, m_PauseEndTime;
 
     /**
      * @brief Additional arguments can be used to extend the functionality of ofxFFmpegRecorder. Additional arguments are used

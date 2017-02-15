@@ -15,12 +15,14 @@ ofxFFmpegRecorder::ofxFFmpegRecorder()
     , m_IsRecordVideo(false)
     , m_IsRecordAudio(false)
     , m_IsOverWrite(false)
+    , m_IsPaused(false)
     , m_VideoSize(0, 0)
-    , m_Fps(30.f)
     , m_BitRate(2000)
     , m_AddedVideFrames(0)
     , m_Process()
-    , m_CaptureDuration(0)
+    , m_Fps(30.f)
+    , m_CaptureDuration(0.f)
+    , m_TotalPauseDuration(0.f)
     , m_DefaultVideoDevice()
     , m_DefaultAudioDevice()
     , m_VideCodec("mpeg4")
@@ -188,6 +190,30 @@ void ofxFFmpegRecorder::setVideCodec(const std::string &codec)
     m_VideCodec = codec;
 }
 
+bool ofxFFmpegRecorder::isPaused() const
+{
+    return m_IsPaused;
+}
+
+void ofxFFmpegRecorder::setPaused(bool paused)
+{
+    if (m_File == nullptr) {
+        LOG_WARNING("Cannot pause the default webcam recording.");
+    }
+    else {
+        if (paused && m_IsPaused == false) {
+            m_PauseStartTime = std::chrono::high_resolution_clock::now();
+        }
+        else if (paused == false && m_IsPaused) {
+            m_PauseEndTime = std::chrono::high_resolution_clock::now();
+            float delta = std::chrono::duration<float>(m_PauseEndTime - m_PauseStartTime).count();
+            m_TotalPauseDuration += delta;
+        }
+
+        m_IsPaused = paused;
+    }
+}
+
 float ofxFFmpegRecorder::getRecordedDuration() const
 {
     return m_AddedVideFrames / m_Fps;
@@ -307,6 +333,11 @@ bool ofxFFmpegRecorder::startCustomRecord()
 
 size_t ofxFFmpegRecorder::addFrame(const ofPixels &pixels)
 {
+    if (m_IsPaused) {
+        LOG_NOTICE("Recording is paused.");
+        return 0;
+    }
+
     if (m_File == nullptr) {
         LOG_ERROR("Custom recording is not in proggress. Cannot add the frame.");
         return 0;
@@ -321,7 +352,7 @@ size_t ofxFFmpegRecorder::addFrame(const ofPixels &pixels)
 
     HighResClock now = std::chrono::high_resolution_clock::now();
     const float recordedDuration = getRecordedDuration();
-    float delta = std::chrono::duration<double>(now - m_RecordStartTime).count() - recordedDuration;
+    float delta = std::chrono::duration<float>(now - m_RecordStartTime).count() - recordedDuration - m_TotalPauseDuration;
     const float framerate = 1.f / m_Fps;
 
     while (m_AddedVideFrames == 0 || delta >= framerate) {
