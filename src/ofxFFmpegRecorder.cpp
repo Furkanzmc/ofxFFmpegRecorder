@@ -188,6 +188,11 @@ void ofxFFmpegRecorder::setVideCodec(const std::string &codec)
     m_VideCodec = codec;
 }
 
+float ofxFFmpegRecorder::getRecordedDuration() const
+{
+    return m_AddedVideFrames / m_Fps;
+}
+
 bool ofxFFmpegRecorder::record(float duration)
 {
     if (isRecording()) {
@@ -271,6 +276,7 @@ bool ofxFFmpegRecorder::startCustomRecord()
     args.push_back("-y");
     args.push_back("-an");
     args.push_back("-r " + std::to_string(m_Fps));
+    args.push_back("-framerate " + std::to_string(m_Fps));
     args.push_back("-s " + std::to_string(static_cast<unsigned int>(m_VideoSize.x)) + "x" + std::to_string(static_cast<unsigned int>(m_VideoSize.y)));
     args.push_back("-f rawvideo");
     args.push_back("-pix_fmt rgb24");
@@ -280,6 +286,7 @@ bool ofxFFmpegRecorder::startCustomRecord()
     args.push_back("-vcodec " + m_VideCodec);
     args.push_back("-b:v " + std::to_string(m_BitRate) + "k");
     args.push_back("-r " + std::to_string(m_Fps));
+    args.push_back("-framerate " + std::to_string(m_Fps));
     std::copy(m_AdditionalOutputArguments.begin(), m_AdditionalOutputArguments.end(), std::back_inserter(args));
 
     args.push_back(m_OutputPath);
@@ -308,21 +315,21 @@ size_t ofxFFmpegRecorder::addFrame(const ofPixels &pixels)
     size_t written = 0;
 
     if (m_AddedVideFrames == 0) {
-        m_LastFrameAddedTime = std::chrono::high_resolution_clock::now();
+        m_FrameStartTime = std::chrono::high_resolution_clock::now();
     }
 
     HighResClock now = std::chrono::high_resolution_clock::now();
-    const float delta = std::chrono::duration<double>(now - m_LastFrameAddedTime).count();
+    const float recordedDuration = getRecordedDuration();
+    float delta = std::chrono::duration<double>(now - m_FrameStartTime).count() - recordedDuration;
     const float framerate = 1.f / m_Fps;
 
-    if (m_AddedVideFrames == 0 || delta >= framerate) {
+    while (m_AddedVideFrames == 0 || delta >= framerate) {
+        delta -= framerate;
         const unsigned char *data = pixels.getData();
         const size_t dataLength = m_VideoSize.x * m_VideoSize.y * 3;
         written = fwrite(data, sizeof(char), dataLength, m_File);
-        m_LastFrameAddedTime = std::chrono::high_resolution_clock::now();
+        m_AddedVideFrames++;
     }
-
-    m_AddedVideFrames++;
 
     return written;
 }

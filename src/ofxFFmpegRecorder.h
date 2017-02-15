@@ -21,7 +21,7 @@ public:
      * @param recordAudio This is not yet supported with custom recording
      * @param ffmpegPath This variable is optional. If left empty, the default "ffmpeg" is used. This required that the "ffmpeg" is in the system's path.
      */
-    void setup(bool recordVideo, bool recordAudio, ofVec2f videoSize = ofVec2f::zero(), float fps = 30, unsigned int bitrate = 2000,
+    void setup(bool recordVideo, bool recordAudio, ofVec2f videoSize = ofVec2f::zero(), float fps = 30.f, unsigned int bitrate = 2000,
                const std::string &ffmpegPath = "");
 
     bool isRecordVideo() const;
@@ -55,6 +55,12 @@ public:
     void setVideCodec(const std::string &codec);
 
     /**
+     * @brief Returns the record duration for the custom recording. This will return 0 for the webcam recording.
+     * @return
+     */
+    float getRecordedDuration() const;
+
+    /**
      * @brief Starts recording a video from a default device that is determined by @ref determineDefaultDevices()
      * @param duration This is optional. Duration is in seconds.
      * @return If the class was already recording a video this method returns false, otherwise it returns true;
@@ -69,7 +75,7 @@ public:
     bool startCustomRecord();
 
     /**
-     * @brief Add a frame to the stream. This can onle be used If you started recording a custom video.
+     * @brief Add a frame to the stream. This can onle be used If you started recording a custom video. Make sure that the frames are added continuously.
      * @param pixels
      * @return
      */
@@ -182,7 +188,7 @@ private:
     /**
      * @brief This is used to make sure that we put in frames no more than the m_Fps
      */
-    HighResClock m_LastFrameAddedTime;
+    HighResClock m_FrameStartTime;
 
     /**
      * @brief Additional arguments can be used to extend the functionality of ofxFFmpegRecorder. Additional arguments are used
