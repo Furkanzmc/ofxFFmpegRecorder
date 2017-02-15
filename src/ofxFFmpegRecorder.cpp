@@ -316,12 +316,12 @@ size_t ofxFFmpegRecorder::addFrame(const ofPixels &pixels)
 
     if (m_AddedVideFrames == 0) {
         m_Thread = std::thread(&ofxFFmpegRecorder::processFrame, this);
-        m_FrameStartTime = std::chrono::high_resolution_clock::now();
+        m_RecordStartTime = std::chrono::high_resolution_clock::now();
     }
 
     HighResClock now = std::chrono::high_resolution_clock::now();
     const float recordedDuration = getRecordedDuration();
-    float delta = std::chrono::duration<double>(now - m_FrameStartTime).count() - recordedDuration;
+    float delta = std::chrono::duration<double>(now - m_RecordStartTime).count() - recordedDuration;
     const float framerate = 1.f / m_Fps;
 
     while (m_AddedVideFrames == 0 || delta >= framerate) {
