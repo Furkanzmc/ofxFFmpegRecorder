@@ -9,6 +9,58 @@
 
 using HighResClock = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
+template <typename T>
+struct LockFreeQueue {
+
+    LockFreeQueue()
+    {
+        // Add one to validate the iterators
+        m_List.push_back(T());
+        m_HeadIt = m_List.begin();
+        m_TailIt = m_List.end();
+    }
+
+    void produce(const T &t)
+    {
+        m_List.push_back(t);
+        m_TailIt = m_List.end();
+        m_List.erase(m_List.begin(), m_HeadIt);
+    }
+
+    bool consume(T &t)
+    {
+        typename TList::iterator nextIt = m_HeadIt;
+        ++nextIt;
+        if (nextIt != m_TailIt) {
+            m_HeadIt = nextIt;
+            t = *m_HeadIt;
+            return true;
+        }
+
+        return false;
+    }
+
+    int size() const
+    {
+        return std::distance(m_HeadIt, m_TailIt) - 1;
+    }
+
+    typename std::list<T>::iterator getHead() const
+    {
+        return m_HeadIt;
+    }
+
+    typename std::list<T>::iterator getTail() const
+    {
+        return m_TailIt;
+    }
+
+private:
+    using TList = std::list<T>;
+    TList m_List;
+    typename TList::iterator m_HeadIt, m_TailIt;
+};
+
 class ofxFFmpegRecorder
 {
 public:
@@ -184,6 +236,7 @@ private:
     ofSoundDevice m_DefaultAudioDevice;
 
     std::string m_VideCodec;
+    FILE *m_File;
 
     /**
      * @brief This is used to make sure that we put in frames no more than the m_Fps
@@ -196,11 +249,19 @@ private:
      */
     std::vector<std::string> m_AdditionalInputArguments, m_AdditionalOutputArguments;
 
-    FILE *m_File;
+    std::thread m_Thread;
+    LockFreeQueue<ofPixels *> m_Frames;
 
 private:
     /**
      * @brief Checks if the current default devices are still available. If they are not, gets the first available device for both audio and video.
      */
     void determineDefaultDevices();
+
+    /**
+     * @brief Runs in parallele and writes the stored frames to ffmpeg
+     */
+    void processFrame();
+    void joinThread();
+
 };

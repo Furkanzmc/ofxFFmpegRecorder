@@ -315,6 +315,7 @@ size_t ofxFFmpegRecorder::addFrame(const ofPixels &pixels)
     size_t written = 0;
 
     if (m_AddedVideFrames == 0) {
+        m_Thread = std::thread(&ofxFFmpegRecorder::processFrame, this);
         m_FrameStartTime = std::chrono::high_resolution_clock::now();
     }
 
@@ -325,9 +326,7 @@ size_t ofxFFmpegRecorder::addFrame(const ofPixels &pixels)
 
     while (m_AddedVideFrames == 0 || delta >= framerate) {
         delta -= framerate;
-        const unsigned char *data = pixels.getData();
-        const size_t dataLength = m_VideoSize.x * m_VideoSize.y * 3;
-        written = fwrite(data, sizeof(char), dataLength, m_File);
+        m_Frames.produce(new ofPixels(pixels));
         m_AddedVideFrames++;
     }
 
@@ -340,6 +339,7 @@ void ofxFFmpegRecorder::stop()
     if (m_File) {
         _pclose(m_File);
         m_File = nullptr;
+        joinThread();
     }
 }
 
@@ -349,6 +349,7 @@ void ofxFFmpegRecorder::cancel()
     if (m_File) {
         _pclose(m_File);
         m_File = nullptr;
+        joinThread();
     }
 
     ofFile::removeFile(m_OutputPath, false);
@@ -504,5 +505,30 @@ void ofxFFmpegRecorder::determineDefaultDevices()
                 break;
             }
         }
+    }
+}
+
+void ofxFFmpegRecorder::processFrame()
+{
+    while (isRecording()) {
+        ofPixels *pixels = nullptr;
+        if (m_Frames.consume(pixels) && pixels) {
+            const unsigned char *data = pixels->getData();
+            const size_t dataLength = m_VideoSize.x * m_VideoSize.y * 3;
+            const size_t written = fwrite(data, sizeof(char), dataLength, m_File);
+            if (written <= 0) {
+                LOG_WARNING("Cannot write the frame.");
+            }
+
+            pixels->clear();
+            delete pixels;
+        }
+    }
+}
+
+void ofxFFmpegRecorder::joinThread()
+{
+    if (m_Thread.joinable()) {
+        m_Thread.join();
     }
 }
