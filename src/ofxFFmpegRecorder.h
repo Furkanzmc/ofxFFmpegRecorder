@@ -205,7 +205,7 @@ public:
 
     /**
      * @brief Saves a thumbnail from the video at the given time. If videoFilePath is empty, then the m_OutputPath is used as the video source.
-     * But m_OutputPath cannot be used as video source if the video recording is in process.
+     * But m_OutputPath cannot be used as video source if the video recording is in process If a default recording was done before.
      * @param hour
      * @param minute
      * @param second

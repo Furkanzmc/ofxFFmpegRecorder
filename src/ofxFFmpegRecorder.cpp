@@ -507,6 +507,11 @@ void ofxFFmpegRecorder::saveThumbnail(const unsigned int &hour, const unsigned i
         }
 
         videoFilePath = m_OutputPath;
+
+        if (ofFile::doesFileExist(m_OutputPath, false) == false) {
+            LOG_ERROR("The video file (" + videoFilePath + " does not exist!");
+            return;
+        }
     }
 
     const std::string time = std::to_string(hour) + ":" + std::to_string(minute) + ":" + std::to_string(second);
