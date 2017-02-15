@@ -179,6 +179,9 @@ private:
 
     std::string m_VideCodec;
 
+    /**
+     * @brief This is used to make sure that we put in frames no more than the m_Fps
+     */
     HighResClock m_LastFrameAddedTime;
 
     /**
