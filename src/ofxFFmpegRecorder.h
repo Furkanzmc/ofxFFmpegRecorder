@@ -239,9 +239,9 @@ private:
     FILE *m_File;
 
     /**
-     * @brief This is used to make sure that we put in frames no more than the m_Fps
+     * @brief This is used to make sure that we put in frames no more than the m_Fps. This is used in custom recording.
      */
-    HighResClock m_FrameStartTime;
+    HighResClock m_RecordStartTime;
 
     /**
      * @brief Additional arguments can be used to extend the functionality of ofxFFmpegRecorder. Additional arguments are used
