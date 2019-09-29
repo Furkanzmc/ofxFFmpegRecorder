@@ -1,0 +1,37 @@
+# QtCreator
+*.qbs.user
+*.pro.user
+*.pri
+
+# Linux
+*~
+# KDE
+.directory
+.AppleDouble
+
+# OSX
+.DS_Store
+*.swp
+*~.nib
+# Thumbnails
+._*
+
+# Windows
+# Windows image file caches
+Thumbs.db
+# Folder config file
+Desktop.ini
+
+#########################
+# miscellaneous
+#########################
+
+.mailmap
+*.app
+*.dSYM
+example_ofxFFmpegRecorder/bin/.tmp
+bin/.tmp
+obj/
+**/build-example-Desktop-Debug
+**/build-example-Desktop-Debug/qtc_Desktop_Debug
+**/build-example-Desktop-Release

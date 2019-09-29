@@ -1,9 +1,14 @@
 #pragma once
-// openFrameworks
+
 #include "ofTypes.h"
-#include "ofBaseSoundStream.h"
+
+#include "ofVideoBaseTypes.h"
+#include "ofSoundBaseTypes.h"
+#include "ofSoundBuffer.h"
 #include "ofRectangle.h"
 #include "ofPixels.h"
+
+#include <thread>
 
 using HighResClock = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
@@ -74,7 +79,9 @@ public:
      * @param recordAudio This is not yet supported with custom recording
      * @param ffmpegPath This variable is optional. If left empty, the default "ffmpeg" is used. This required that the "ffmpeg" is in the system's path.
      */
-    void setup(bool recordVideo, bool recordAudio, ofVec2f videoSize = ofVec2f::zero(), float fps = 30.f, unsigned int bitrate = 2000,
+    
+    
+    void setup(bool recordVideo, bool recordAudio, glm::vec2 videoSize = glm::vec2(0,0), float fps = 30.f, unsigned int bitrate = 2000,
                const std::string &ffmpegPath = "");
 
     bool isRecordVideo() const;
@@ -85,6 +92,7 @@ public:
 
     std::string getFFmpegPath() const;
     void setFFmpegPath(const std::string &path);
+    void setFFmpegPathToAddonsPath();
 
     float getCaptureDuration() const;
     void setCaptureDuration(float duration);
@@ -104,17 +112,32 @@ public:
     unsigned int getBitRate() const;
     void setBitRate(unsigned int rate);
 
-    std::string getVideCodec() const;
-    void setVideCodec(const std::string &codec);
+    std::string getVideoCodec() const;
+    void setVideoCodec(const std::string &codec);
+
+    void setAudioConfig(int bufferSize, int sampleRate);
+
+	float getWidth();
+	void setWidth(float aw);
+	float getHeight();
+	void setHeight(float ah);
 
     bool isPaused() const;
     void setPaused(bool paused);
+
+	void setPixelFormat(ofImageType aType);
 
     /**
      * @brief Returns the record duration for the custom recording. This will return 0 for the webcam recording.
      * @return
      */
     float getRecordedDuration() const;
+
+    /**
+     * @brief Returns the record duration for the custom audio recording.
+     * @return
+     */
+    float getRecordedAudioDuration(float afps) const;
 
     /**
      * @brief Starts recording a video from a default device that is determined by @ref determineDefaultDevices()
@@ -126,9 +149,23 @@ public:
     /**
      * @brief Setup ffmpeg for a custom video recording. Input is taken from the stdin as raw image. This also inherits the
      * m_AdditionalArguments.
-     * @return If the class was already recording a video this method returns false, otherwise it returns true;
+     * @return If the class was already recording a video/audio this method returns false, otherwise it returns true;
      */
     bool startCustomRecord();
+
+    /**
+     * @brief Setup ffmpeg for a custom audio recording. This also inherits the
+     * m_AdditionalArguments.
+     * @return If the class was already recording a video/audio this method returns false, otherwise it returns true;
+     */
+    bool startCustomAudioRecord();
+
+    /**
+     * @brief Setup ffmpeg for a custom video streaming. Input is taken from the stdin as raw image. This also inherits the
+     * m_AdditionalArguments.
+     * @return If the class was already recording a video/audio this method returns false, otherwise it returns true;
+     */
+    bool startCustomStreaming();
 
     /**
      * @brief Add a frame to the stream. This can onle be used If you started recording a custom video. Make sure that the frames are added continuously.
@@ -136,6 +173,13 @@ public:
      * @return
      */
     size_t addFrame(const ofPixels &pixels);
+
+    /**
+     * @brief Add a sound buffer to the stream. This can onle be used If you started recording a custom audio. Make sure that the buffers are added continuously inside the audioIn thread.
+     * @param pixels
+     * @return
+     */
+    size_t addBuffer(const ofSoundBuffer &buffer, float afps);
 
     void stop();
 
@@ -213,7 +257,7 @@ public:
      * @param size
      * @param videoFilePath
      */
-    void saveThumbnail(const unsigned int &hour, const unsigned int &minute, const float &second, const std::string &output, ofVec2f size = ofVec2f(0, 0),
+    void saveThumbnail(const unsigned int &hour, const unsigned int &minute, const float &second, const std::string &output, glm::vec2 size = glm::vec2(0, 0),
                        ofRectangle crop = ofRectangle(0, 0, 0, 0), std::string videoFilePath = "");
 
 private:
@@ -230,12 +274,15 @@ private:
      */
     bool m_IsPaused;
 
-    ofVec2f m_VideoSize;
-    unsigned int m_BitRate, m_AddedVideoFrames;
+    glm::vec2 m_VideoSize;
+    unsigned int m_BitRate, m_AddedVideoFrames, m_AddedAudioFrames;
 
     float m_Fps,
           m_CaptureDuration,
           m_TotalPauseDuration;
+
+    int m_bufferSize;
+    int m_sampleRate;
 
     /**
      * @brief If the default video device is not set, the default one is automatically set by this class
@@ -248,6 +295,7 @@ private:
     ofSoundDevice m_DefaultAudioDevice;
 
     std::string m_VideCodec;
+    std::string m_AudioCodec;
     FILE *m_CustomRecordingFile, *m_DefaultRecordingFile;
 
     /**
@@ -265,6 +313,9 @@ private:
 
     std::thread m_Thread;
     LockFreeQueue<ofPixels *> m_Frames;
+    LockFreeQueue<ofSoundBuffer *> m_Buffers;
+
+    std::string mPixFmt = "rgb24";
 
 private:
     /**
@@ -273,9 +324,10 @@ private:
     void determineDefaultDevices();
 
     /**
-     * @brief Runs in parallele and writes the stored frames to ffmpeg
+     * @brief Runs in parallele and writes the stored frames/buffers to ffmpeg
      */
     void processFrame();
+    void processBuffer();
     void joinThread();
 
 };
