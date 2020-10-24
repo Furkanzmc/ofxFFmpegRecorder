@@ -382,7 +382,7 @@ bool ofxFFmpegRecorder::startCustomRecord()
     args.push_back("-framerate " + std::to_string(m_Fps));
     std::copy(m_AdditionalOutputArguments.begin(), m_AdditionalOutputArguments.end(), std::back_inserter(args));
     
-    args.push_back(m_OutputPath);
+    args.push_back("\""+m_OutputPath+"\"");
 //    args.push_back("-codecs ");
 
     std::string cmd = m_FFmpegPath + " ";
@@ -440,7 +440,7 @@ bool ofxFFmpegRecorder::startCustomAudioRecord()
     args.push_back("-b:a 320k");
     std::copy(m_AdditionalOutputArguments.begin(), m_AdditionalOutputArguments.end(), std::back_inserter(args));
 
-    args.push_back(m_OutputPath);
+    args.push_back("\""+m_OutputPath+"\"");
 
     std::string cmd = m_FFmpegPath + " ";
     for (auto arg : args) {
